@@ -81,12 +81,17 @@
         }
 
         function loginSpotify() {
-            // 🛠️ 오타 완전 교정: ${CLIENT_ID}로 정상 수정 완료했습니다.
-            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=token&show_dialog=true`;
+            // 🛠️ 지독한 백틱 오타 방지를 위해 일반 문자열 더하기(+) 방식으로 완벽히 교정했습니다.
+            const authUrl = 'https://accounts.spotify.com/authorize' +
+                            '?client_id=' + CLIENT_ID +
+                            '&redirect_uri=' + encodeURIComponent(REDIRECT_URI) +
+                            '&scope=' + encodeURIComponent(SCOPES) +
+                            '&response_type=token' +
+                            '&show_dialog=true';
             window.location.href = authUrl;
         }
 
-        // URL 해시(#) 뒤에 붙어오는 토큰 정보 안전하게 파싱하기
+        // URL 해시(#) 뒤에 붙어오는 토큰 정보 파싱
         const hashParams = {};
         const hash = window.location.hash.substring(1);
         if (hash) {
@@ -101,7 +106,6 @@
 
         if (token) {
             loginBtn.classList.add('hidden');
-            // 주소창 지저분한 해시값 정리
             window.history.pushState({}, document.title, window.location.pathname);
             startSpotifySyncLoop();
         }
@@ -118,14 +122,14 @@
             if(!token) return;
             try {
                 let res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (res.status === 204) { trackInfo.innerText = "스포티파이에서 음악을 재생해 주세요."; isPlaying = false; return; }
                 if (res.status === 401) { trackInfo.innerText = "인증 만료. 버튼을 다시 눌러주세요."; loginBtn.classList.remove('hidden'); isPlaying = false; return; }
                 
                 let data = await res.json(); isPlaying = data.is_playing;
                 if (data.item) {
-                    trackInfo.innerText = `🎵 Playing: ${data.item.name} - ${data.item.artists[0].name}`;
+                    trackInfo.innerText = '🎵 Playing: ' + data.item.name + ' - ' + data.item.artists[0].name;
                     if (currentTrackId !== data.item.id) { currentTrackId = data.item.id; getTrackFeatures(currentTrackId); }
                 }
             } catch (err) { console.error(err); }
@@ -133,8 +137,8 @@
 
         async function getTrackFeatures(trackId) {
             try {
-                let res = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                let res = await fetch('https://api.spotify.com/v1/audio-features/' + trackId, {
+                    headers: { 'Authorization': 'Bearer ' + token }
                 });
                 let data = await res.json(); if(data.tempo) trackBpm = data.tempo;
             } catch(e) { trackBpm = 120; }
@@ -155,7 +159,7 @@
                 let finalHeight = baseWave + randomNoise;
                 if (isBeat && i < 20) { finalHeight += 55; }
                 finalHeight = Math.max(10, Math.min(160, finalHeight));
-                bars[i].style.height = `${finalHeight}px`;
+                bars[i].style.height = finalHeight + 'px';
             }
         }
 
@@ -163,11 +167,11 @@
         setInterval(() => {
             if(!isPlaying) return;
             const particle = document.createElement('div'); particle.classList.add('particle');
-            const size = Math.random() * 4 + 2; particle.style.width = `${size}px`; particle.style.height = `${size}px`;
-            particle.style.left = `${10 + Math.random() * 80}%`; particle.style.bottom = `${70 + Math.random() * 20}px`;
+            const size = Math.random() * 4 + 2; particle.style.width = size + 'px'; particle.style.height = size + 'px';
+            particle.style.left = (10 + Math.random() * 80) + '%'; particle.style.bottom = (70 + Math.random() * 20) + 'px';
             const pColor = Math.random() > 0.5 ? '#f107a3' : '#ff5e62';
-            particle.style.background = pColor; particle.style.boxShadow = `0 0 10px ${pColor}`;
-            particle.style.animationDuration = `${2 + Math.random() * 3}s`;
+            particle.style.background = pColor; particle.style.boxShadow = '0 0 10px ' + pColor;
+            particle.style.animationDuration = (2 + Math.random() * 3) + 's';
             particlesContainer.appendChild(particle);
             setTimeout(() => { particle.remove(); }, 5000);
         }, 120);
