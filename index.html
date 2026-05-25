@@ -69,8 +69,6 @@
         const CLIENT_ID = '56d1497d32114ebeb203e828ebc11e25'; 
         const REDIRECT_URI = 'https://guy093.github.io/spotify/index.html'; 
         const SCOPES = 'user-read-currently-playing user-read-playback-state';
-
-        // ⚠️ [중요] 스포티파이 대시보드 Basic Information 탭에서 'View client secret'을 누른 뒤 나오는 문자열을 아래 빈칸에 정확히 넣어주세요!
         const CLIENT_SECRET = '968061c935df4bc7a48f52b007967684'; 
 
         const equalizer = document.getElementById('equalizer');
@@ -84,6 +82,7 @@
         }
 
         function loginSpotify() {
+            // 🛠️ 오타 교정 완료: 0{CLIENT_ID} 부분을 정상적인 템플릿 리터럴로 수정했습니다.
             const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=code&show_dialog=true`;
             window.location.href = authUrl;
         }
@@ -99,7 +98,6 @@
 
         let token = null;
         async function exchangeCodeForToken(code) {
-            // 헤더에 Client ID와 Secret 키를 Base64로 인코딩하여 스포티파이 보안 필터를 완전히 통과합니다.
             const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
             const payload = {
                 method: 'POST',
