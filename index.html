@@ -69,7 +69,6 @@
         const CLIENT_ID = '56d1497d32114ebeb203e828ebc11e25'; 
         const REDIRECT_URI = 'https://guy093.github.io/spotify/index.html'; 
         const SCOPES = 'user-read-currently-playing user-read-playback-state';
-        const CLIENT_SECRET = '968061c935df4bc7a48f52b007967684'; 
 
         const equalizer = document.getElementById('equalizer');
         const trackInfo = document.getElementById('trackInfo');
@@ -82,46 +81,29 @@
         }
 
         function loginSpotify() {
-            // 🛠️ 오타 교정 완료: 0{CLIENT_ID} 부분을 정상적인 템플릿 리터럴로 수정했습니다.
-            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=code&show_dialog=true`;
+            // response_type을 token으로 주어 백엔드 인증 단계를 완전히 생략합니다. (오타 검증 완료)
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=token&show_dialog=true`;
             window.location.href = authUrl;
         }
 
-        const urlParams = new URLSearchParams(window.location.search);
-        let code = urlParams.get('code');
-
-        if (code) {
-            loginBtn.classList.add('hidden');
-            window.history.pushState({}, document.title, window.location.pathname);
-            exchangeCodeForToken(code);
+        // URL 해시(#) 뒤에 붙어오는 access_token 가로채기
+        const hashParams = {};
+        const hash = window.location.hash.substring(1);
+        if (hash) {
+            const parts = hash.split('&');
+            parts.forEach(part => {
+                const subParts = part.split('=');
+                hashParams[subParts[0]] = decodeURIComponent(subParts[1]);
+            });
         }
 
-        let token = null;
-        async function exchangeCodeForToken(code) {
-            const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
-            const payload = {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': `Basic ${credentials}`
-                },
-                body: new URLSearchParams({
-                    grant_type: 'authorization-code',
-                    code: code,
-                    redirect_uri: REDIRECT_URI
-                }),
-            };
+        let token = hashParams.access_token;
 
-            try {
-                const res = await fetch('https://accounts.spotify.com/api/token', payload);
-                const data = await res.json();
-                if (data.access_token) {
-                    token = data.access_token;
-                    startSpotifySyncLoop();
-                } else {
-                    trackInfo.innerText = "토큰 매핑에 실패했습니다. 코드가 올바른지 확인하세요.";
-                }
-            } catch (err) { console.error(err); }
+        if (token) {
+            loginBtn.classList.add('hidden');
+            // 주소창 지저분한 해시값 정리
+            window.history.pushState({}, document.title, window.location.pathname);
+            startSpotifySyncLoop();
         }
 
         let currentTrackId = null; let trackBpm = 120; let isPlaying = false;
