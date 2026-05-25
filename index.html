@@ -70,6 +70,9 @@
         const REDIRECT_URI = 'https://guy093.github.io/spotify/index.html'; 
         const SCOPES = 'user-read-currently-playing user-read-playback-state';
 
+        // ⚠️ [중요] 스포티파이 대시보드 Basic Information 탭에서 'View client secret'을 누른 뒤 나오는 문자열을 아래 빈칸에 정확히 넣어주세요!
+        const CLIENT_SECRET = '968061c935df4bc7a48f52b007967684'; 
+
         const equalizer = document.getElementById('equalizer');
         const trackInfo = document.getElementById('trackInfo');
         const loginBtn = document.getElementById('loginBtn');
@@ -80,36 +83,11 @@
             equalizer.appendChild(bar); bars.push(bar);
         }
 
-        // PKCE 인증용 고유 키 생성 유틸리티
-        function generateRandomString(length) {
-            const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            const values = crypto.getRandomValues(new Uint8Array(length));
-            return Array.from(values).map((x) => possible[x % possible.length]).join('');
-        }
-
-        async function sha256(plain) {
-            const encoder = new TextEncoder(); const data = encoder.encode(plain);
-            return crypto.subtle.digest('SHA-256', data);
-        }
-
-        function base64urlencode(a) {
-            return btoa(String.fromCharCode.apply(null, new Uint8Array(a)))
-                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        }
-
-        // 스포티파이 공식 Auth 페이지로 정석 라우팅 (response_type=code 필수 적용)
-        async function loginSpotify() {
-            const codeVerifier = generateRandomString(64);
-            window.localStorage.setItem('code_verifier', codeVerifier);
-
-            const hashed = await sha256(codeVerifier);
-            const codeChallenge = base64urlencode(hashed);
-
-            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=code&code_challenge_method=S256&code_challenge=${codeChallenge}&show_dialog=true`;
+        function loginSpotify() {
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=code&show_dialog=true`;
             window.location.href = authUrl;
         }
 
-        // URL 파라미터에서 코드 가로채기
         const urlParams = new URLSearchParams(window.location.search);
         let code = urlParams.get('code');
 
@@ -120,18 +98,19 @@
         }
 
         let token = null;
-        // 가짜 구글 주소 다 걷어내고 공식 API 서버로 토큰 교환 토스
         async function exchangeCodeForToken(code) {
-            const codeVerifier = window.localStorage.getItem('code_verifier');
+            // 헤더에 Client ID와 Secret 키를 Base64로 인코딩하여 스포티파이 보안 필터를 완전히 통과합니다.
+            const credentials = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
             const payload = {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                headers: { 
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Basic ${credentials}`
+                },
                 body: new URLSearchParams({
-                    client_id: CLIENT_ID,
                     grant_type: 'authorization-code',
                     code: code,
-                    redirect_uri: REDIRECT_URI,
-                    code_verifier: codeVerifier
+                    redirect_uri: REDIRECT_URI
                 }),
             };
 
@@ -142,7 +121,7 @@
                     token = data.access_token;
                     startSpotifySyncLoop();
                 } else {
-                    trackInfo.innerText = "토큰 매핑에 실패했습니다. 유저 관리 탭을 다시 확인해 주세요.";
+                    trackInfo.innerText = "토큰 매핑에 실패했습니다. 코드가 올바른지 확인하세요.";
                 }
             } catch (err) { console.error(err); }
         }
