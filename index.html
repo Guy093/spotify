@@ -69,10 +69,6 @@
         const CLIENT_ID = '56d1497d32114ebeb203e828ebc11e25'; 
         const REDIRECT_URI = 'https://guy093.github.io/spotify/index.html'; 
         const SCOPES = 'user-read-currently-playing user-read-playback-state';
-        
-        // 🔒 주소 오염 방지 처리 완료된 API 기본 경로들
-        const SPOTIFY_AUTH_API = 'https://' + 'accounts.' + 'spotify.com/authorize';
-        const SPOTIFY_BASE_API = 'https://' + 'api.' + 'spotify.com/v1';
 
         const equalizer = document.getElementById('equalizer');
         const trackInfo = document.getElementById('trackInfo');
@@ -84,30 +80,71 @@
             equalizer.appendChild(bar); bars.push(bar);
         }
 
-        function loginSpotify() {
-            // response_type을 'token'으로 직접 꽂아 처리하는 정석 우회로입니다.
-            const authUrl = `${SPOTIFY_AUTH_API}?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=token&show_dialog=true`;
+        // PKCE 인증용 고유 키 생성 유틸리티
+        function generateRandomString(length) {
+            const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const values = crypto.getRandomValues(new Uint8Array(length));
+            return Array.from(values).map((x) => possible[x % possible.length]).join('');
+        }
+
+        async function sha256(plain) {
+            const encoder = new TextEncoder(); const data = encoder.encode(plain);
+            return crypto.subtle.digest('SHA-256', data);
+        }
+
+        function base64urlencode(a) {
+            return btoa(String.fromCharCode.apply(null, new Uint8Array(a)))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        // 스포티파이 공식 Auth 페이지로 정석 라우팅 (response_type=code 필수 적용)
+        async function loginSpotify() {
+            const codeVerifier = generateRandomString(64);
+            window.localStorage.setItem('code_verifier', codeVerifier);
+
+            const hashed = await sha256(codeVerifier);
+            const codeChallenge = base64urlencode(hashed);
+
+            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=code&code_challenge_method=S256&code_challenge=${codeChallenge}&show_dialog=true`;
             window.location.href = authUrl;
         }
 
-        // URL 해시(#) 뒤에 붙어오는 토큰 정보 안전하게 파싱하기
-        const hashParams = {};
-        const hash = window.location.hash.substring(1);
-        if (hash) {
-            const parts = hash.split('&');
-            parts.forEach(part => {
-                const subParts = part.split('=');
-                hashParams[subParts[0]] = decodeURIComponent(subParts[1]);
-            });
+        // URL 파라미터에서 코드 가로채기
+        const urlParams = new URLSearchParams(window.location.search);
+        let code = urlParams.get('code');
+
+        if (code) {
+            loginBtn.classList.add('hidden');
+            window.history.pushState({}, document.title, window.location.pathname);
+            exchangeCodeForToken(code);
         }
 
-        let token = hashParams.access_token;
+        let token = null;
+        // 가짜 구글 주소 다 걷어내고 공식 API 서버로 토큰 교환 토스
+        async function exchangeCodeForToken(code) {
+            const codeVerifier = window.localStorage.getItem('code_verifier');
+            const payload = {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    client_id: CLIENT_ID,
+                    grant_type: 'authorization-code',
+                    code: code,
+                    redirect_uri: REDIRECT_URI,
+                    code_verifier: codeVerifier
+                }),
+            };
 
-        if (token) {
-            loginBtn.classList.add('hidden');
-            // 주소창 깔끔하게 밀어버리기
-            window.history.pushState({}, document.title, window.location.pathname);
-            startSpotifySyncLoop();
+            try {
+                const res = await fetch('https://accounts.spotify.com/api/token', payload);
+                const data = await res.json();
+                if (data.access_token) {
+                    token = data.access_token;
+                    startSpotifySyncLoop();
+                } else {
+                    trackInfo.innerText = "토큰 매핑에 실패했습니다. 유저 관리 탭을 다시 확인해 주세요.";
+                }
+            } catch (err) { console.error(err); }
         }
 
         let currentTrackId = null; let trackBpm = 120; let isPlaying = false;
@@ -121,7 +158,7 @@
         async function checkCurrentPlayback() {
             if(!token) return;
             try {
-                let res = await fetch(`${SPOTIFY_BASE_API}/me/player/currently-playing`, {
+                let res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.status === 204) { trackInfo.innerText = "스포티파이에서 음악을 재생해 주세요."; isPlaying = false; return; }
@@ -137,7 +174,7 @@
 
         async function getTrackFeatures(trackId) {
             try {
-                let res = await fetch(`${SPOTIFY_BASE_API}/audio-features/${trackId}`, {
+                let res = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 let data = await res.json(); if(data.tempo) trackBpm = data.tempo;
