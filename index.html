@@ -81,12 +81,12 @@
         }
 
         function loginSpotify() {
-            // response_type을 token으로 주어 백엔드 인증 단계를 완전히 생략합니다. (오타 검증 완료)
+            // 🛠️ 오타 완전 교정: ${CLIENT_ID}로 정상 수정 완료했습니다.
             const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=token&show_dialog=true`;
             window.location.href = authUrl;
         }
 
-        // URL 해시(#) 뒤에 붙어오는 access_token 가로채기
+        // URL 해시(#) 뒤에 붙어오는 토큰 정보 안전하게 파싱하기
         const hashParams = {};
         const hash = window.location.hash.substring(1);
         if (hash) {
