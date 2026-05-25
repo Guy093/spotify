@@ -21,7 +21,7 @@
             width: 6px; height: 10px;
             background: linear-gradient(to top, #7b2ff7 0px, #7b2ff7 25px, #f107a3 40px, #f107a3 60px, #ff5e62 75px, #ff5e62 100px);
             border-radius: 3px 3px 0 0; opacity: 0.9; filter: drop-shadow(0 0 5px rgba(241, 7, 163, 0.4));
-            transition: height 0.08s ease;
+            transition: height 0.05s ease;
         }
         .base-line {
             position: relative; width: 100%; height: 6px;
@@ -42,7 +42,7 @@
             letter-spacing: 1px;
         }
         .login-btn:hover { background: #1ed760; transform: scale(1.05); box-shadow: 0 0 15px rgba(29, 185, 84, 0.4); }
-        .track-info { color: #00d4ff; font-size: 14px; margin-top: 10px; font-weight: bold; letter-spacing: 0.5px; }
+        .track-info { color: #00d4ff; font-size: 14px; margin-top: 10px; font-weight: bold; letter-spacing: 0.5px; min-height: 20px; }
         .hidden { display: none; }
         .particles { position: absolute; width: 100%; height: 100%; pointer-events: none; top: 0; left: 0; }
         .particle { position: absolute; border-radius: 50%; animation: float 4s infinite linear; }
@@ -66,7 +66,7 @@
     </div>
 
     <script>
-        // ⚠️ [필수 수정] 스포티파이 개발자 대시보드에서 내 Client ID를 꼭 넣어주세요!
+        // ⚠️ [수정] 내 스포티파이 Client ID를 꼭 넣어주세요!
         const CLIENT_ID = '56d1497d32114ebeb203e828ebc11e25'; 
         
         const REDIRECT_URI = 'https://guy093.github.io/spotify/index.html'; 
@@ -82,53 +82,48 @@
             equalizer.appendChild(bar); bars.push(bar);
         }
 
-        // PKCE 및 수신용 파라미터 처리
-        const urlParams = new URLSearchParams(window.location.search);
-        let code = urlParams.get('code');
+        // URL 해시값에서 토큰 꺼내기 (Implicit Grant 방식 매핑)
+        const hash = window.location.hash
+            .substring(1)
+            .split('&')
+            .reduce(function (initial, item) {
+                if (item) { var parts = item.split('='); initial[parts[0]] = decodeURIComponent(parts[1]); }
+                return initial;
+            }, {});
 
-        if (code) {
+        let token = hash.access_token;
+
+        if (token) {
             loginBtn.classList.add('hidden');
-            // 주파수 파라미터 청소
-            window.history.pushState({}, document.title, window.location.pathname);
-            getAccessToken(code);
+            // 주소창 지저분한 해시 청소
+            window.location.hash = "";
+            startSpotifySyncLoop();
         }
 
         function loginSpotify() {
-            // 암호화 검증 코드 생략을 위한 편리한 암호 흐름 생성
-            const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=code&show_dialog=true`;
-            window.location.href = authUrl;
+            // response_type을 'token'으로 던져야 백엔드 없이 주소창으로 토큰이 즉시 리턴됩니다!
+            window.location.href = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=token&show_dialog=true`;
         }
 
-        let token = null;
-        async function getAccessToken(code) {
-            // 최근 보안 정책에 대응하는 간이 토큰 교환 요청
-            // 단독 프론트엔드 배포를 위해 임시 토큰 가공 루틴 적용
-            try {
-                // 스포티파이의 토큰 발급 대용 절차 진입
-                // 원래는 백엔드가 필요하지만 브라우저 처리를 우회하도록 간소화
-                alert("인증 코드가 감지되었습니다. 스포티파이 계정 승인을 분석합니다.");
-                
-                // 💡 참고: Client ID가 올바르면 스포티파이가 정상적인 로그인 창을 거쳐 
-                // 주소창 뒤에 ?code=... 를 붙여서 여기로 되돌려 보냅니다.
-            } catch (e) { console.error(e); }
-        }
-
-        // 기존 비주얼라이저 루프 뼈대 유지
         let currentTrackId = null; let trackBpm = 120; let isPlaying = false;
 
         function startSpotifySyncLoop() {
-            setInterval(checkCurrentPlayback, 2000);
+            checkCurrentPlayback(); // 첫 실행
+            setInterval(checkCurrentPlayback, 2000); // 2초마다 갱신
             renderFrame();
         }
 
         async function checkCurrentPlayback() {
-            if(!token) return;
             try {
                 let res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (res.status === 204) { trackInfo.innerText = "스포티파이에서 음악을 재생해 주세요."; isPlaying = false; return; }
-                let data = await res.json(); isPlaying = data.is_playing;
+                if (res.status === 401) { trackInfo.innerText = "인증이 만료되었습니다. 새로고침 후 다시 연결하세요."; isPlaying = false; return; }
+                
+                let data = await res.json(); 
+                isPlaying = data.is_playing;
+                
                 if (data.item) {
                     trackInfo.innerText = `🎵 Playing: ${data.item.name} - ${data.item.artists[0].name}`;
                     if (currentTrackId !== data.item.id) { currentTrackId = data.item.id; getTrackFeatures(currentTrackId); }
@@ -150,14 +145,15 @@
             requestAnimationFrame(renderFrame);
             if (!isPlaying) { bars.forEach(bar => bar.style.height = '10px'); return; }
             frameCount++;
+            
             let beatInterval = Math.round((60 / trackBpm) * 60); 
-            let isBeat = (frameCount % beatInterval) < 5;
+            let isBeat = (frameCount % beatInterval) < 6;
 
             for (let i = 0; i < barCount; i++) {
-                let baseWave = Math.sin((i / barCount) * Math.PI * 2 + (frameCount * 0.15)) * 40 + 60;
-                let randomNoise = Math.random() * 30;
+                let baseWave = Math.sin((i / barCount) * Math.PI * 2 + (frameCount * 0.15)) * 45 + 65;
+                let randomNoise = Math.random() * 35;
                 let finalHeight = baseWave + randomNoise;
-                if (isBeat && i < 20) { finalHeight += 60; }
+                if (isBeat && i < 20) { finalHeight += 55; }
                 finalHeight = Math.max(10, Math.min(160, finalHeight));
                 bars[i].style.height = `${finalHeight}px`;
             }
