@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResoSync - Spotify Audio Visualizer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: #0b0c10; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; min-height: 100vh;
+            overflow: hidden; font-family: sans-serif;
+            background: radial-gradient(circle at center, #11141a 0%, #050608 100%);
+        }
+        .resonance-container {
+            position: relative; display: flex; flex-direction: column;
+            align-items: center; justify-content: flex-end; width: 800px; height: 250px; margin-bottom: 30px;
+        }
+        .equalizer { display: flex; align-items: flex-end; justify-content: space-between; width: 85%; height: 180px; z-index: 2; padding-bottom: 4px; }
+        .bar {
+            width: 6px; height: 10px;
+            background: linear-gradient(to top, #7b2ff7 0px, #7b2ff7 25px, #f107a3 40px, #f107a3 60px, #ff5e62 75px, #ff5e62 100px);
+            border-radius: 3px 3px 0 0; opacity: 0.9; filter: drop-shadow(0 0 5px rgba(241, 7, 163, 0.4));
+            transition: height 0.08s ease;
+        }
+        .base-line {
+            position: relative; width: 100%; height: 6px;
+            background: linear-gradient(90deg, rgba(255,255,255,0) 0%, #00d4ff 30%, #00d4ff 70%, rgba(255,255,255,0) 100%);
+            border-radius: 3px; box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
+            display: flex; justify-content: space-around; align-items: center; z-index: 3;
+        }
+        .flower-node {
+            width: 24px; height: 24px; background: #ffffff;
+            clip-path: polygon(50% 0%, 80% 30%, 100% 60%, 60% 70%, 50% 100%, 40% 70%, 0% 60%, 20% 30%);
+            box-shadow: 0 0 15px #fff, 0 0 25px #00d4ff; animation: pulse 2s infinite ease-in-out; margin-top: -2px;
+        }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.15); opacity: 1; } }
+        .spotify-ctrl { z-index: 10; text-align: center; }
+        .login-btn {
+            background: #1DB954; color: #fff; padding: 12px 24px; border-radius: 25px;
+            font-weight: bold; border: none; cursor: pointer; font-size: 14px; transition: 0.2s;
+            letter-spacing: 1px;
+        }
+        .login-btn:hover { background: #1ed760; transform: scale(1.05); box-shadow: 0 0 15px rgba(29, 185, 84, 0.4); }
+        .track-info { color: #00d4ff; font-size: 14px; margin-top: 10px; font-weight: bold; letter-spacing: 0.5px; }
+        .hidden { display: none; }
+        .particles { position: absolute; width: 100%; height: 100%; pointer-events: none; top: 0; left: 0; }
+        .particle { position: absolute; border-radius: 50%; animation: float 4s infinite linear; }
+        @keyframes float { 0% { transform: translateY(0) scale(1); opacity: 0; } 50% { opacity: 0.8; } 100% { transform: translateY(-80px) scale(0.3); opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div class="resonance-container">
+        <div class="particles" id="particles"></div>
+        <div class="equalizer" id="equalizer"></div>
+        <div class="base-line">
+            <div class="flower-node"></div>
+            <div class="flower-node"></div>
+        </div>
+    </div>
+
+    <div class="spotify-ctrl">
+        <button id="loginBtn" class="login-btn" onclick="loginSpotify()">🟢 SPOTIFY CONNECT</button>
+        <div id="trackInfo" class="track-info"></div>
+    </div>
+
+    <script>
+        // ⚠️ [수정] 스포티파이 개발자 대시보드에서 복사한 내 Client ID를 여기에 넣으세요!
+        const CLIENT_ID = '여기에_내_CLIENT_ID를_복사해서_넣으세요'; 
+        
+        // 내 깃허브 페이지스 주소 고정 (index.html 포함)
+        const REDIRECT_URI = 'https://guy093.github.io/spotify/index.html'; 
+        
+        const SCOPES = 'user-read-currently-playing user-read-playback-state';
+        const equalizer = document.getElementById('equalizer');
+        const trackInfo = document.getElementById('trackInfo');
+        const loginBtn = document.getElementById('loginBtn');
+        const barCount = 64; const bars = [];
+
+        // 비주얼라이저 바 생성
+        for (let i = 0; i < barCount; i++) {
+            const bar = document.createElement('div'); bar.classList.add('bar');
+            equalizer.appendChild(bar); bars.push(bar);
+        }
+
+        // URL에서 토큰 파싱
+        let token = window.location.hash.substring(1).split('&').reduce((initial, item) => {
+            if (item) { var parts = item.split('='); initial[parts[0]] = decodeURIComponent(parts[1]); }
+            return initial;
+        }, {}).access_token;
+
+        if (token) {
+            loginBtn.classList.add('hidden');
+            window.location.hash = ""; 
+            startSpotifySyncLoop();
+        }
+
+        function loginSpotify() {
+            window.location = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(SCOPES)}&response_type=token&show_dialog=true`;
+        }
+
+        let currentTrackId = null; let trackBpm = 120; let isPlaying = false;
+
+        function startSpotifySyncLoop() {
+            setInterval(checkCurrentPlayback, 2000); // 2초마다 현재 재생곡 체크
+            renderFrame();
+        }
+
+        async function checkCurrentPlayback() {
+            try {
+                let res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.status === 204) { trackInfo.innerText = "스포티파이에서 음악을 재생해 주세요."; isPlaying = false; return; }
+                let data = await res.json(); isPlaying = data.is_playing;
+                if (data.item) {
+                    trackInfo.innerText = `🎵 Playing: ${data.item.name} - ${data.item.artists[0].name}`;
+                    if (currentTrackId !== data.item.id) { currentTrackId = data.item.id; getTrackFeatures(currentTrackId); }
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        async function getTrackFeatures(trackId) {
+            try {
+                let res = await fetch(`https://api.spotify.com/v1/audio-features/${trackId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                let data = await res.json(); if(data.bpm) trackBpm = data.bpm;
+            } catch(e) { trackBpm = 120; }
+        }
+
+        let frameCount = 0;
+        function renderFrame() {
+            requestAnimationFrame(renderFrame);
+            if (!isPlaying) { bars.forEach(bar => bar.style.height = '10px'); return; }
+            frameCount++;
+            let beatInterval = Math.round((60 / trackBpm) * 60); 
+            let isBeat = (frameCount % beatInterval) < 5;
+
+            for (let i = 0; i < barCount; i++) {
+                let baseWave = Math.sin((i / barCount) * Math.PI * 2 + (frameCount * 0.15)) * 40 + 60;
+                let randomNoise = Math.random() * 30;
+                let finalHeight = baseWave + randomNoise;
+                if (isBeat && i < 20) { finalHeight += 60; } // 비트에 맞춰 저음역대 쿵쾅거림 연출
+                finalHeight = Math.max(10, Math.min(160, finalHeight));
+                bars[i].style.height = `${finalHeight}px`;
+            }
+        }
+
+        // 파티클 시스템
+        const particlesContainer = document.getElementById('particles');
+        setInterval(() => {
+            if(!isPlaying) return;
+            const particle = document.createElement('div'); particle.classList.add('particle');
+            const size = Math.random() * 4 + 2; particle.style.width = `${size}px`; particle.style.height = `${size}px`;
+            particle.style.left = `${10 + Math.random() * 80}%`; particle.style.bottom = `${70 + Math.random() * 20}px`;
+            const pColor = Math.random() > 0.5 ? '#f107a3' : '#ff5e62';
+            particle.style.background = pColor; particle.style.boxShadow = `0 0 10px ${pColor}`;
+            particle.style.animationDuration = `${2 + Math.random() * 3}s`;
+            particlesContainer.appendChild(particle);
+            setTimeout(() => { particle.remove(); }, 5000);
+        }, 120);
+    </script>
+</body>
+</html>
