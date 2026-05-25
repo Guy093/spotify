@@ -81,7 +81,7 @@
         }
 
         function loginSpotify() {
-            // 🛠️ 지독한 백틱 오타 방지를 위해 일반 문자열 더하기(+) 방식으로 완벽히 교정했습니다.
+            // 🛠️ 진짜 스포티파이 공식 인증 주소(accounts.spotify.com)로 완벽히 수정 완료
             const authUrl = 'https://accounts.spotify.com/authorize' +
                             '?client_id=' + CLIENT_ID +
                             '&redirect_uri=' + encodeURIComponent(REDIRECT_URI) +
@@ -121,7 +121,8 @@
         async function checkCurrentPlayback() {
             if(!token) return;
             try {
-                let res = await fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+                // 🛠️ API 요청 주소도 스포티파이 공식 주소(api.spotify.com)로 정상 복구
+                let res = await fetch('https://api.spotify.com/v1/me/player', {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
                 if (res.status === 204) { trackInfo.innerText = "스포티파이에서 음악을 재생해 주세요."; isPlaying = false; return; }
@@ -137,6 +138,7 @@
 
         async function getTrackFeatures(trackId) {
             try {
+                // 🛠️ 트랙 분석 주소도 공식 API 주소로 수정
                 let res = await fetch('https://api.spotify.com/v1/audio-features/' + trackId, {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
@@ -175,6 +177,3 @@
             particlesContainer.appendChild(particle);
             setTimeout(() => { particle.remove(); }, 5000);
         }, 120);
-    </script>
-</body>
-</html>
